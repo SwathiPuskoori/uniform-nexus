@@ -112,12 +112,9 @@ export function FilterSidebar({ onFilterChange }: FilterSidebarProps) {
               step={5}
               className="w-full"
             />
-            <div className="flex justify-between text-sm">
-              <span className="font-medium text-green-600">${filters.priceRange[0]}.00</span>
-              <span className="font-medium text-green-600">${filters.priceRange[1]}.00</span>
-            </div>
-            <div className="text-xs text-muted-foreground text-center">
-              Showing prices {filters.priceRange[0] === filters.priceRange[1] ? `at $${filters.priceRange[0]}` : `from $${filters.priceRange[0]} to $${filters.priceRange[1]}`}
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>${filters.priceRange[0]}</span>
+              <span>${filters.priceRange[1]}</span>
             </div>
           </div>
         </CardContent>

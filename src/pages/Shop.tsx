@@ -6,100 +6,31 @@ import { FilterSidebar, FilterState } from '@/components/FilterSidebar';
 import { ProductCard } from '@/components/ProductCard';
 import { ProductModal } from '@/components/ProductModal';
 import { LogoCustomizationModal } from '@/components/LogoCustomizationModal';
-import { AuthModal } from '@/components/AuthModal';
 import { Product, Group, CartItem } from '@/types';
+import { mockProducts } from '@/data/mockData';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
 
 export default function Shop() {
   const { toast } = useToast();
-  const { user } = useAuth();
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showFilters, setShowFilters] = useState(true);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [logoModalProduct, setLogoModalProduct] = useState<Product | null>(null);
   const [currentGroup, setCurrentGroup] = useState<Group | null>(null);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
-  const [cartItemCount, setCartItemCount] = useState(0);
-  const [showAuthModal, setShowAuthModal] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>(mockProducts);
 
-  // Load products from Supabase
   useEffect(() => {
-    const loadProducts = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('products')
-          .select('*');
-        
-        if (error) throw error;
-        
-        const formattedProducts: Product[] = data.map(product => ({
-          id: product.id,
-          name: product.name,
-          code: product.code,
-          brand: product.brand,
-          department: product.department,
-          retailPrice: product.retail_price,
-          contractPrice: product.contract_price,
-          colors: product.colors as any[],
-          sizes: product.sizes as string[],
-          logoEligible: product.logo_eligible,
-          image: product.image_url || '',
-          imageUrl: product.image_url || '',
-          description: '',
-          inStock: product.in_stock
-        }));
-        
-        setProducts(formattedProducts);
-        setFilteredProducts(formattedProducts);
-      } catch (error: any) {
-        toast({
-          title: "Error loading products",
-          description: error.message,
-          variant: "destructive"
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadProducts();
-  }, [toast]);
-
-  // Load group data and cart count
-  useEffect(() => {
+    // Check if user is logged in with a group
     const groupData = localStorage.getItem('currentGroup');
     if (groupData) {
       setCurrentGroup(JSON.parse(groupData));
     }
-
-    if (user) {
-      loadCartCount();
-    }
-  }, [user]);
-
-  const loadCartCount = async () => {
-    if (!user) return;
-    
-    try {
-      const { count, error } = await supabase
-        .from('cart_items')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id);
-      
-      if (error) throw error;
-      setCartItemCount(count || 0);
-    } catch (error: any) {
-      console.error('Error loading cart count:', error);
-    }
-  };
+  }, []);
 
   const handleFilterChange = (filters: FilterState) => {
-    let filtered = products.filter(product => {
+    let filtered = mockProducts.filter(product => {
       // Keyword search
       if (filters.keyword && !product.name.toLowerCase().includes(filters.keyword.toLowerCase()) &&
           !product.code.toLowerCase().includes(filters.keyword.toLowerCase())) {
@@ -134,11 +65,6 @@ export default function Shop() {
   };
 
   const handleAddToCart = (product: Product) => {
-    if (!user) {
-      setShowAuthModal(true);
-      return;
-    }
-
     // Check if this product is logo eligible for group users
     if (currentGroup?.logoCustomization && product.logoEligible) {
       setLogoModalProduct(product);
@@ -147,42 +73,25 @@ export default function Shop() {
     }
   };
 
-  const addToCartDirect = async (product: Product, color?: string, size?: string, quantity?: number, logoCustomization: boolean = false) => {
-    if (!user) {
-      setShowAuthModal(true);
-      return;
-    }
+  const addToCartDirect = (product: Product, color?: string, size?: string, quantity?: number, logoCustomization: boolean = false) => {
+    const price = currentGroup ? product.contractPrice : product.retailPrice;
+    
+    const cartItem: CartItem = {
+      id: `${product.id}-${Date.now()}`,
+      product,
+      color: color || product.colors[0].name,
+      size: size || product.sizes[0],
+      quantity: quantity || 1,
+      logoCustomization,
+      price
+    };
 
-    try {
-      const price = currentGroup ? product.contractPrice : product.retailPrice;
-      
-      const { error } = await supabase
-        .from('cart_items')
-        .insert({
-          user_id: user.id,
-          product_id: product.id,
-          color: color || product.colors[0]?.name || 'Default',
-          size: size || product.sizes[0] || 'Default',
-          quantity: quantity || 1,
-          logo_customization: logoCustomization,
-          price
-        });
-
-      if (error) throw error;
-
-      await loadCartCount();
-      
-      toast({
-        title: "Added to Cart",
-        description: `${product.name} added to your cart`,
-      });
-    } catch (error: any) {
-      toast({
-        title: "Error adding to cart",
-        description: error.message,
-        variant: "destructive"
-      });
-    }
+    setCart(prev => [...prev, cartItem]);
+    
+    toast({
+      title: "Added to Cart",
+      description: `${product.name} added to your cart`,
+    });
   };
 
   const handleLogoSelection = (hasLogo: boolean) => {
@@ -194,7 +103,7 @@ export default function Shop() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header cartItemCount={cartItemCount} />
+      <Header cartItemCount={cart.length} />
       
       <div className="container mx-auto px-4 py-6">
         {/* Group Context */}
@@ -298,16 +207,6 @@ export default function Shop() {
           onClose={() => setLogoModalProduct(null)}
         />
       )}
-
-      {/* Auth Modal */}
-      <AuthModal
-        isOpen={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
-        onSuccess={() => {
-          setShowAuthModal(false);
-          loadCartCount();
-        }}
-      />
     </div>
   );
 }

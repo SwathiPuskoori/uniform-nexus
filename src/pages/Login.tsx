@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,59 +6,20 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Header } from '@/components/Header';
+import { mockGroups } from '@/data/mockData';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
-import { Group } from '@/types';
 
 export default function Login() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user } = useAuth();
   const [groupCode, setGroupCode] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  // Redirect if already logged in
-  useEffect(() => {
-    if (user) {
-      navigate('/shop');
-    }
-  }, [user, navigate]);
-
-  // Load groups from Supabase
-  useEffect(() => {
-    const loadGroups = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('groups')
-          .select('*');
-        
-        if (error) throw error;
-        
-        const formattedGroups: Group[] = data.map(group => ({
-          id: group.id,
-          name: group.name,
-          code: group.code,
-          logoCustomization: group.logo_customization,
-          description: '',
-          isActive: true
-        }));
-        
-        setGroups(formattedGroups);
-      } catch (error: any) {
-        console.error('Error loading groups:', error);
-      }
-    };
-
-    loadGroups();
-  }, []);
 
   const handleGroupLogin = () => {
-    const group = groups.find(g => g.code.toLowerCase() === groupCode.toLowerCase());
+    const group = mockGroups.find(g => g.code.toLowerCase() === groupCode.toLowerCase());
     if (group) {
+      // Store group info in localStorage for demo
       localStorage.setItem('currentGroup', JSON.stringify(group));
       toast({
         title: "Group Access Granted",
@@ -74,48 +35,28 @@ export default function Login() {
     }
   };
 
-  const cleanupAuthState = () => {
-    Object.keys(localStorage).forEach((key) => {
-      if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
-        localStorage.removeItem(key);
-      }
-    });
-  };
-
-  const handleIndividualLogin = async () => {
-    if (!email || !password) {
-      toast({
-        title: "Missing Information",
-        description: "Please enter both email and password.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setLoading(true);
-    try {
-      cleanupAuthState();
-      
-      const { data, error } = await supabase.auth.signInWithPassword({
+  const handleIndividualLogin = () => {
+    if (email && password) {
+      // Mock login success
+      const user = {
+        id: '1',
         email,
-        password,
-      });
-
-      if (error) throw error;
-
+        firstName: 'John',
+        lastName: 'Doe',
+        isRetailLinked: false
+      };
+      localStorage.setItem('currentUser', JSON.stringify(user));
       toast({
         title: "Login Successful",
         description: "Welcome back!",
       });
       navigate('/shop');
-    } catch (error: any) {
+    } else {
       toast({
         title: "Login Failed",
-        description: error.message,
+        description: "Please enter valid credentials.",
         variant: "destructive"
       });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -174,11 +115,11 @@ export default function Login() {
                     />
                   </div>
                   <div className="flex flex-col gap-2">
-                    <Button onClick={handleIndividualLogin} className="w-full" disabled={loading}>
-                      {loading ? "Signing In..." : "Sign In"}
+                    <Button onClick={handleIndividualLogin} className="w-full">
+                      Sign In
                     </Button>
-                    <Button variant="outline" className="w-full" onClick={() => navigate('/shop')}>
-                      Continue as Guest
+                    <Button variant="outline" className="w-full">
+                      Create New Account
                     </Button>
                     <Button variant="link" className="w-full">
                       Forgot Password?
@@ -211,7 +152,7 @@ export default function Login() {
                   <div className="bg-muted p-4 rounded-lg">
                     <h4 className="font-semibold mb-2">Available Contract Codes:</h4>
                     <ul className="text-sm text-muted-foreground space-y-1">
-                      {groups.map(group => (
+                      {mockGroups.map(group => (
                         <li key={group.id}>
                           <strong>{group.code}</strong> - {group.name}
                         </li>
