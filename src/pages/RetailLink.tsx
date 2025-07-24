@@ -5,8 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Header } from '@/components/Header';
-import { mockRetailCustomers } from '@/data/mockData';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function RetailLink() {
   const navigate = useNavigate();
@@ -14,38 +14,60 @@ export default function RetailLink() {
   const [phone, setPhone] = useState('');
   const [zipCode, setZipCode] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const handleLookup = async () => {
-    setIsLoading(true);
-    
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Check against mock retail customers
-    const customer = mockRetailCustomers.find(c => 
-      c.phone === phone.replace(/\D/g, '') && 
-      c.zipCode === zipCode &&
-      c.accountNumber === accountNumber
-    );
-
-    if (customer) {
+    if (!phone || !zipCode || !accountNumber) {
       toast({
-        title: "Account Found!",
-        description: `Found account for ${customer.firstName} ${customer.lastName}`,
-      });
-      // In real app, proceed to Step 2 - create online credentials
-      localStorage.setItem('linkingCustomer', JSON.stringify(customer));
-      navigate('/retail-link-step2');
-    } else {
-      toast({
-        title: "Account Not Found",
-        description: "Please verify your information or contact our store at (614) 793-0469",
+        title: "Missing Information",
+        description: "Please fill in all fields to lookup your account.",
         variant: "destructive"
       });
+      return;
     }
-    
-    setIsLoading(false);
+
+    setLoading(true);
+    try {
+      // Remove formatting from phone number for comparison
+      const cleanPhone = phone.replace(/\D/g, '');
+      
+      const { data, error } = await supabase
+        .from('retail_customers')
+        .select('*')
+        .eq('phone', cleanPhone)
+        .eq('zip_code', zipCode)
+        .eq('account_number', accountNumber)
+        .maybeSingle();
+
+      if (error) {
+        throw error;
+      }
+
+      if (!data) {
+        toast({
+          title: "Account Not Found",
+          description: "Please check your information and try again, or contact us directly at (614) 793-0469.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Store the found customer info for step 2
+      localStorage.setItem('foundCustomer', JSON.stringify(data));
+      toast({
+        title: "Account Found!",
+        description: `Found account for ${data.first_name} ${data.last_name}`,
+      });
+      navigate('/retail-link-step2');
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "An error occurred while looking up your account.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCancel = () => {
@@ -120,18 +142,19 @@ export default function RetailLink() {
               <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                 <h4 className="font-semibold text-green-800 mb-2">Demo Account Data:</h4>
                 <div className="text-sm text-green-700 space-y-1">
-                  <p><strong>Phone:</strong> (614) 123-4567 | <strong>Zip:</strong> 43215 | <strong>Account:</strong> R123456</p>
-                  <p><strong>Phone:</strong> (614) 987-6543 | <strong>Zip:</strong> 43201 | <strong>Account:</strong> R789012</p>
+                  <p><strong>Phone:</strong> 6141234567 | <strong>Zip:</strong> 43215 | <strong>Account:</strong> RC001234</p>
+                  <p><strong>Phone:</strong> 6149876543 | <strong>Zip:</strong> 43016 | <strong>Account:</strong> RC005678</p>
+                  <p><strong>Phone:</strong> 6145551234 | <strong>Zip:</strong> 43228 | <strong>Account:</strong> RC009012</p>
                 </div>
               </div>
 
               <div className="flex gap-4">
                 <Button 
                   onClick={handleLookup}
-                  disabled={!phone || !zipCode || !accountNumber || isLoading}
+                  disabled={!phone || !zipCode || !accountNumber || loading}
                   className="flex-1"
                 >
-                  {isLoading ? 'Looking up...' : 'Lookup'}
+                  {loading ? 'Looking up...' : 'Lookup'}
                 </Button>
                 <Button variant="outline" onClick={handleCancel} className="flex-1">
                   Cancel
